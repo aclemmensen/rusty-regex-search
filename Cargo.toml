@@ -1,0 +1,40 @@
+[package]
+name = "regex-search"
+version = "0.1.0"
+authors = ["Asbjørn Clemmensen <ac@givetwise.dk>"]
+
+[dependencies]
+flate2 = "0.2"
+stopwatch = "0.0.7"
+lazy_static = "1.0.0"
+regex = "0.2.3"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
