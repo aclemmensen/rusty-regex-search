@@ -28,12 +28,29 @@ struct SearchReader<'a> {
     path: &'a Path
 }
 
+#[derive(Debug)]
+enum SearchReaderError {
+    UnsupportedContentType
+}
+
+type SearchReaderResult<'a> = Result<SearchReader<'a>, SearchReaderError>;
+
 impl<'a> SearchReader<'a> {
     fn new(reader: Box<BufRead>, path: &Path, reader_type: ReaderType) -> SearchReader {
         SearchReader {
             reader: reader,
             reader_type: reader_type,
             path: path
+        }
+    }
+
+    fn build(path: &'a PathBuf) -> SearchReaderResult {
+        match path.extension() {
+            Some(ext) if ext == "gz" => Ok(SearchReader::new(gz_reader(&path).unwrap(), path, ReaderType::Chunk)),
+            Some(ext) if ext == "html" => Ok(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Chunk)),
+            Some(ext) if ext == "html-changed" => Ok(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Delta)),
+            Some(ext) if ext == "deleted" => Ok(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Delete)),
+            _ => Err(SearchReaderError::UnsupportedContentType)
         }
     }
 }
@@ -68,17 +85,14 @@ fn scandir(path: &Path, expected_ext: Option<&str>) -> io::Result<Vec<PathBuf>> 
 fn build_readers(paths: &Vec<PathBuf>) -> Vec<SearchReader> {
     let mut readers: Vec<SearchReader> = Vec::new();
     for ref path in paths {
-        println!("{:?}", path);
-        match path.extension() {
-            Some(ext) if ext == "gz" => readers.push(SearchReader::new(gz_reader(&path).unwrap(), path, ReaderType::Chunk)),
-            Some(ext) if ext == "html" => readers.push(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Chunk)),
-            Some(ext) if ext == "html-changed" => readers.push(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Delta)),
-            Some(ext) if ext == "deleted" => readers.push(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Delete)),
+        match SearchReader::build(path) {
+            Ok(reader) => readers.push(reader),
             _ => ()
         }
     }
     readers
 }
+
 /// Parse the line into an (id, content) tuple
 fn parseline(line: &String) -> Option<(i64, String)> {
     match line.find(':') {
