@@ -3,6 +3,7 @@ extern crate stopwatch;
 #[macro_use]
 extern crate lazy_static;
 extern crate regex;
+extern crate clap;
 
 use std::io::{self, BufReader, BufRead};
 use std::boxed::Box;
@@ -12,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use stopwatch::Stopwatch;
 use regex::Regex;
+use clap::{Arg, App};
 
 /// Scan the provided directory for files that have extensions that match
 /// the provided pattern, or any files if no pattern is provided.
@@ -193,12 +195,26 @@ fn search(reader: Box<BufRead>) -> io::Result<()> {
 /// Run the search in a directory
 fn run(dir: &Path) -> io::Result<()> {
     let paths = scandir(dir, None)?;
+    println!("Scanning {} files", paths.len());
     searchfiles(&paths)?;
     Ok(())
 }
 
 fn main() {
-    println!("Hello, world!");
-    run(&Path::new("C://temp//sites//cmp")).unwrap();
+    let matches = App::new("regex-search")
+        .version("1.0")
+        .about("Search text content fastly")
+        .author("aclemmensen")
+        .arg(Arg::with_name("path")
+            .short("p")
+            .long("path")
+            .help("Path to folder containing HTML to search")
+            .takes_value(true)
+            .default_value("C://temp//sites//cmp")
+            .required(true))
+        .get_matches();
+    
+    let path = matches.value_of("path").unwrap();
+    run(&Path::new(path)).unwrap();
 }
 
