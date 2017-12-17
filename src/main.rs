@@ -15,6 +15,29 @@ use stopwatch::Stopwatch;
 use regex::Regex;
 use clap::{Arg, App};
 
+#[derive(Debug)]
+enum ReaderType {
+    Chunk,
+    Delta,
+    Delete
+}
+
+struct SearchReader<'a> {
+    reader: Box<BufRead>,
+    reader_type: ReaderType,
+    path: &'a Path
+}
+
+impl<'a> SearchReader<'a> {
+    fn new(reader: Box<BufRead>, path: &Path, reader_type: ReaderType) -> SearchReader {
+        SearchReader {
+            reader: reader,
+            reader_type: reader_type,
+            path: path
+        }
+    }
+}
+
 /// Scan the provided directory for files that have extensions that match
 /// the provided pattern, or any files if no pattern is provided.
 fn scandir(path: &Path, expected_ext: Option<&str>) -> io::Result<Vec<PathBuf>> {
@@ -42,13 +65,15 @@ fn scandir(path: &Path, expected_ext: Option<&str>) -> io::Result<Vec<PathBuf>> 
 }
 
 /// Build a list of readers that are compatible with the file extensions discovered
-fn build_readers(paths: &Vec<PathBuf>) -> Vec<Box<BufRead>> {
-    let mut readers: Vec<Box<BufRead>> = Vec::new();
+fn build_readers(paths: &Vec<PathBuf>) -> Vec<SearchReader> {
+    let mut readers: Vec<SearchReader> = Vec::new();
     for ref path in paths {
         println!("{:?}", path);
         match path.extension() {
-            Some(ext) if ext == "gz" => readers.push(gz_reader(&path).unwrap()),
-            Some(ext) if ext == "html" => readers.push(raw_reader(&path).unwrap()),
+            Some(ext) if ext == "gz" => readers.push(SearchReader::new(gz_reader(&path).unwrap(), path, ReaderType::Chunk)),
+            Some(ext) if ext == "html" => readers.push(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Chunk)),
+            Some(ext) if ext == "html-changed" => readers.push(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Delta)),
+            Some(ext) if ext == "deleted" => readers.push(SearchReader::new(raw_reader(&path).unwrap(), path, ReaderType::Delete)),
             _ => ()
         }
     }
@@ -97,15 +122,7 @@ fn raw_reader(path: &PathBuf) -> io::Result<Box<BufRead>> {
     Ok(Box::new(raw_reader))
 }
 
-// ###################################
-// Cleanup methods below
-// ###################################
-#[allow(dead_code)]
-fn cleanup3(line: &str) -> String {
-    line.replace("\\n", "\n")
-}
-
-#[allow(dead_code)]
+/// Clean up escaped input
 fn cleanup2(line: &str) -> String {
     lazy_static! {
         static ref REGEX: Regex = Regex::new("\\n").unwrap();
@@ -115,67 +132,14 @@ fn cleanup2(line: &str) -> String {
     replaced
 }
 
-#[allow(dead_code)]
-fn cleanup4(line: &str) -> String {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new("\\n").unwrap();
-    }
-
-    let mut last_match = 0;
-    let mut begin: usize;
-    let mut end: usize;
-    let matches = REGEX.find_iter(line);
-    let mut result = String::with_capacity(line.len());
-
-    for m in matches {
-        begin = m.start();
-        end = m.end();
-        result.push_str(&line[last_match..begin]);
-        result.push('\n');
-        last_match = end;
-    }
-
-    result.push_str(&line[last_match..]);
-
-    result
-}
-
-#[allow(dead_code)]
-fn cleanup1(line: &str) -> String {
-    let mut buf = String::with_capacity(line.len());
-    let mut nl = false;
-
-    for c in line.chars() {
-        if c == '\\' {
-            nl = true;
-            continue;
-        }
-
-        if nl {
-            if c == 'n' {
-                buf.push('\n');
-                continue;
-            }
-            else {
-                buf.push('\\');
-            }
-
-            nl = false;
-        }
-
-        buf.push(c);
-    }
-
-    buf
-}
-
 /// Do the searching - this is fake right now
-fn search(reader: Box<BufRead>) -> io::Result<()> {
+fn search(reader: SearchReader) -> io::Result<()> {
     let mut bytes: usize = 0;
     let mut lines: u32 = 0;
     let sw = Stopwatch::start_new();
+    println!("{:?} -> {:?}", reader.path, reader.reader_type);
 
-    for line in reader.lines() {
+    for line in reader.reader.lines() {
         let line = line?;
         bytes += line.len();
         lines += 1;
@@ -195,7 +159,7 @@ fn search(reader: Box<BufRead>) -> io::Result<()> {
 /// Run the search in a directory
 fn run(dir: &Path) -> io::Result<()> {
     let paths = scandir(dir, None)?;
-    println!("Scanning {} files", paths.len());
+    println!("Scanning {} files from {:?}", paths.len(), dir);
     searchfiles(&paths)?;
     Ok(())
 }
