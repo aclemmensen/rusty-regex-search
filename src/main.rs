@@ -79,15 +79,6 @@ fn build_readers(paths: &Vec<PathBuf>) -> Vec<SearchReader> {
     }
     readers
 }
-
-/// Search the list of files
-fn searchfiles(paths: &Vec<PathBuf>) -> io::Result<()> {
-    for reader in build_readers(paths) {
-        search(reader)?;
-    }
-    Ok(())
-}
-
 /// Parse the line into an (id, content) tuple
 fn parseline(line: &String) -> Option<(i64, String)> {
     match line.find(':') {
@@ -155,6 +146,15 @@ fn search(reader: SearchReader) -> io::Result<()> {
 
     Ok(())
 }
+
+/// Search the list of files
+fn searchfiles(paths: &Vec<PathBuf>) -> io::Result<()> {
+    for reader in build_readers(paths) {
+        search(reader)?;
+    }
+    Ok(())
+}
+
 
 /// Run the search in a directory
 fn run(dir: &Path) -> io::Result<()> {
